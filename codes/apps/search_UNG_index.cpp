@@ -18,7 +18,7 @@ struct CostEntry
     float cost;
 };
 
-// 读取 cost_result_x.csv 文件
+// 读取 cost/cost_result_x.csv 文件
 void read_cost_file(const std::string &file_path, std::vector<CostEntry> &cost_entries)
 {
     std::ifstream file(file_path);
@@ -109,6 +109,40 @@ void load_cost_files(std::pair<ANNS::IdxType, float> *gt, int num_queries, int K
     }
 }
 
+// 读取sort_cost/sorted_cost_result_0.csv 文件
+void load_sort_cost_files(std::pair<ANNS::IdxType, float> *gt, int num_queries, int K)
+{
+    std::string cost_dir = "./data/cost/";
+
+    for (int query_id = 0; query_id < num_queries; ++query_id)
+    {
+        std::cout << "Processing query_id: " << query_id << std::endl;
+        std::vector<CostEntry> cost_entries;
+        std::string file_path = cost_dir + "cost_result_" + std::to_string(query_id) + ".csv";
+
+        if (fssy::exists(file_path))
+            read_cost_file(file_path, cost_entries);
+        else
+        {
+            std::cerr << "File not found: " << file_path << std::endl;
+            continue;
+        }
+
+        // 按 cost 进行排序
+        std::sort(cost_entries.begin(), cost_entries.end(), [](const CostEntry &a, const CostEntry &b)
+                  { return a.cost < b.cost; });
+
+        // 选取最小的 K 个并存入 gt
+        for (int i = 0; i < std::min(K, static_cast<int>(cost_entries.size())); ++i)
+        {
+            gt[query_id * K + i] = std::make_pair(cost_entries[i].vector_id, cost_entries[i].cost);
+        }
+
+        // 将排序后的结果存入 sort_cost 目录
+        // save_sorted_cost(cost_entries, query_id);
+    }
+}
+
 int main(int argc, char **argv)
 {
     std::string data_type, dist_fn, scenario;
@@ -117,7 +151,7 @@ int main(int argc, char **argv)
     ANNS::IdxType K, num_entry_points;
     std::vector<ANNS::IdxType> Lsearch_list;
     uint32_t num_threads;
-    int gt_mode = 1; // 0: ground truth is distance and in binary file, 1: ground truth is cost and in csv file
+    int gt_mode = 2; // 0: ground truth is distance and in binary file, 1: ground truth is cost and in csv file, calculate costs, 2: ground truth is cost and in csv file, read costs
 
     try
     {
@@ -194,9 +228,24 @@ int main(int argc, char **argv)
     auto gt = new std::pair<ANNS::IdxType, float>[num_queries * K];
     if (gt_mode == 0)
         ANNS::load_gt_file(gt_file, gt, num_queries, K);
-    else
+    else if (gt_mode == 1)
     {
         load_cost_files(gt, num_queries, K);
+    }
+    else if (gt_mode == 2)
+    {
+        load_sort_cost_files(gt, num_queries, K);
+        // int tmp_query_id = 0;
+        // std::string directory_path = "./data/sort_cost/";
+        // for (const auto &entry : fs::directory_iterator(directory_path))
+        // {
+        //     if (entry.path().extension() == ".csv")
+        //     {
+        //         std::cout << "Processing file: " << entry.path().string() << std::endl;
+        //         load_sorted_cost_file(entry.path().string(), &gt[tmp_query_id * K], K);
+        //         tmp_query_id++; // 递增 query_id，确保 gt 正确存储多个查询的结果
+        //     }
+        // }
     }
     auto results = new std::pair<ANNS::IdxType, float>[num_queries * K];
 

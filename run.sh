@@ -68,4 +68,4 @@ cd ..
     --gt_file ./data/sift/sift_gt_12_labels_zipf_containment.bin \
     --index_path_prefix ./data/index_files/UNG/sift_base_12_labels_zipf_general_cross6_R32_L100_A1.2/ \
     --result_path_prefix ./results/UNG/sift_base_12_labels_zipf_containment_cross6_R32_L100_A1.2/ \
-    --scenario containment --num_entry_points 16 --Lsearch 10 50 300 500 1000 1200 3000
+    --scenario containment --num_entry_points 16 --Lsearch 10 50 300 500 1000 1200 3000 4000 5000
