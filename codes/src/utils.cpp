@@ -1,4 +1,8 @@
 #include <set>
+#include <iostream>
+#include <fstream>
+#include <set>
+#include <vector>
 #include "utils.h"
 
 namespace ANNS
@@ -80,6 +84,67 @@ namespace ANNS
             }
         }
         return 100.0 * total_correct / (num_queries * K);
+    }
+
+    // fxy_add
+    float calculate_recall_to_csv(const std::pair<IdxType, float> *gt,
+                                  const std::pair<IdxType, float> *results,
+                                  uint32_t num_queries,
+                                  uint32_t K,
+                                  const std::string &output_file)
+    {
+        float total_correct = 0;
+        std::vector<float> query_recalls(num_queries, 0); // 存储每个查询的召回率
+
+        std::ofstream file(output_file);
+        if (!file.is_open())
+        {
+            std::cerr << "Failed to open file: " << output_file << std::endl;
+            return -1; // 文件打开失败，返回错误值
+        }
+
+        file << "Query ID,Recall (%)\n"; // 写入 CSV 头部
+
+        for (uint32_t i = 0; i < num_queries; i++)
+        {
+            std::set<IdxType> gt_set;
+            int32_t offset = -1;
+            float correct_count = 0;
+
+            for (uint32_t j = 0; j < K; j++)
+            {
+                if (gt[i * K + j].first != -1)
+                {
+                    offset = j;
+                    gt_set.insert(gt[i * K + j].first);
+                }
+            }
+
+            for (uint32_t j = 0; j < K; j++)
+            {
+                if (results[i * K + j].first == -1)
+                    break;
+                if (offset >= 0 && results[i * K + j].second == gt[i * K + offset].second)
+                { // 处理 cost 相等的情况
+                    correct_count++;
+                    offset--;
+                }
+                else
+                {
+                    if (gt_set.find(results[i * K + j].first) != gt_set.end())
+                        correct_count++;
+                }
+            }
+
+            query_recalls[i] = correct_count / K; // 计算当前查询的 recall
+            total_correct += correct_count;
+
+            file << i << "," << query_recalls[i] << "\n"; // 写入文件
+        }
+
+        file.close();
+
+        return 100.0 * total_correct / (num_queries * K); // 返回整体召回率
     }
 
 }

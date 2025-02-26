@@ -2,7 +2,10 @@
 #include <iostream>
 #include <algorithm>
 #include <unordered_set>
+#include <vector>
+#include <unordered_set>
 #include <boost/filesystem.hpp>
+#include <cmath>
 #include "utils.h"
 #include "vamana/vamana.h"
 #include "uni_nav_graph.h"
@@ -11,6 +14,14 @@ namespace fs = boost::filesystem;
 
 namespace ANNS
 {
+
+    // 假设 dis 的范围是 [0, 1e6]
+    const float DIS_LOWER_BOUND = 0.0f;
+    const float DIS_UPPER_BOUND = 1e6f;
+
+    // 假设 c 的范围是 [0, 1]，无需归一化
+    const float C_LOWER_BOUND = 0.0f;
+    const float C_UPPER_BOUND = 1.0f;
 
     void UniNavGraph::build(std::shared_ptr<IStorage> base_storage, std::shared_ptr<DistanceHandler> distance_handler,
                             std::string scenario, std::string index_name, uint32_t num_threads, IdxType num_cross_edges,
@@ -415,9 +426,11 @@ namespace ANNS
         std::cout << "\r- Finish in " << _build_cross_edges_time << " ms" << std::endl;
     }
 
-    void UniNavGraph::search(std::shared_ptr<IStorage> query_storage, std::shared_ptr<DistanceHandler> distance_handler,
+    void UniNavGraph::search(std::shared_ptr<IStorage> query_storage, std::shared_ptr<IStorage> query_storage_o, std::shared_ptr<DistanceHandler> distance_handler,
                              uint32_t num_threads, IdxType Lsearch, IdxType num_entry_points, std::string scenario,
-                             IdxType K, std::pair<IdxType, float> *results, std::vector<float> &num_cmps)
+                             IdxType K, std::pair<IdxType, float> *results, std::vector<float> &num_cmps,
+                             //  std::vector<std::unordered_map<ANNS::IdxType, float>> &all_cost_entries,
+                             float alpha)
     {
         // 1. 初始化和参数检查
         auto num_queries = query_storage->get_num_points();
@@ -483,7 +496,8 @@ namespace ANNS
                 }
 
                 // graph search
-                num_cmps[id] = iterate_to_fixed_point(query, search_cache, id, entry_points);
+                // num_cmps[id] = iterate_to_fixed_point(query, search_cache, id, entry_points);
+                num_cmps[id] = cost_iterate_to_fixed_point(query, search_cache, id, entry_points, alpha, query_storage_o); // entry_points存的向量的id
                 cur_result = search_cache->search_queue;
             }
 
@@ -584,6 +598,7 @@ namespace ANNS
         // 2.处理入口点：计算查询向量与入口点向量之间的距离，并将入口点插入搜索队列
         for (const auto &entry_point : entry_points)
             search_queue.insert(entry_point, _distance_handler->compute(query, _base_storage->get_vector(entry_point), dim));
+        // search_queue.insert(entry_point, _distance_handler->compute(query, _base_storage->get_vector(entry_point), dim));
         IdxType num_cmps = entry_points.size();
 
         // 3. 贪心扩展最近节点
@@ -611,6 +626,117 @@ namespace ANNS
 
                 // push to search queue
                 search_queue.insert(neighbor, _distance_handler->compute(query, _base_storage->get_vector(neighbor), dim));
+                num_cmps++;
+            }
+        }
+        return num_cmps;
+    }
+
+    // fxy_add 计算标签覆盖率
+    float compute_label_coverage(const std::vector<ANNS::LabelType> &query_labels,
+                                 const std::vector<ANNS::LabelType> &entry_labels)
+    {
+        if (query_labels.empty())
+        {
+            return 0.0f; // 避免除零错误
+        }
+
+        std::unordered_set<ANNS::LabelType> entry_set(entry_labels.begin(), entry_labels.end());
+
+        // 计算 query 中有多少标签出现在 entry 中
+        int intersection_size = 0;
+        for (const auto &label : query_labels)
+        {
+            if (entry_set.find(label) != entry_set.end())
+            {
+                ++intersection_size;
+            }
+        }
+
+        return static_cast<float>(intersection_size) / query_labels.size();
+    }
+    // fxy_add 归一化 dis
+    float normalize_dis(float dis)
+    {
+        // 确保 dis 在 [DIS_LOWER_BOUND, DIS_UPPER_BOUND] 范围内
+        dis = std::max(DIS_LOWER_BOUND, std::min(dis, DIS_UPPER_BOUND));
+        // 归一化到 [0, 1]
+        return (dis - DIS_LOWER_BOUND) / (DIS_UPPER_BOUND - DIS_LOWER_BOUND);
+    }
+
+    // fxy_add 计算 cost
+    float compute_cost(float dis, float c, float alpha)
+    {
+        float dis_norm = normalize_dis(dis);
+        float c_norm = c;
+        return alpha * dis_norm - (1 - alpha) * c_norm;
+    }
+
+    // fxy_add
+    IdxType UniNavGraph::cost_iterate_to_fixed_point(const char *query, std::shared_ptr<SearchCache> search_cache,
+                                                     IdxType target_id, const std::vector<IdxType> &entry_points,
+                                                     //  std::vector<std::unordered_map<ANNS::IdxType, float>> &all_cost_entries,
+                                                     float alpha,
+                                                     std::shared_ptr<IStorage> query_storage_o,
+                                                     bool clear_search_queue, bool clear_visited_set)
+    {
+        // 1. 初始化
+        auto dim = _base_storage->get_dim();
+        auto &search_queue = search_cache->search_queue;
+        auto &visited_set = search_cache->visited_set;
+        std::vector<IdxType> neighbors;
+        if (clear_search_queue)
+            search_queue.clear();
+        if (clear_visited_set)
+            visited_set.clear();
+
+        // 2.处理入口点：计算查询向量与入口点向量之间的距离，并将入口点插入搜索队列
+        for (const auto &entry_point : entry_points)
+        {
+            // search_queue.insert(entry_point, get_cost_from_all_cost_entries(target_id, entry_point, all_cost_entries));
+            //  search_queue.insert(entry_point, _distance_handler->compute(query, _base_storage->get_vector(entry_point), dim));
+            float dis = _distance_handler->compute(query, _base_storage->get_vector(entry_point), dim);
+            std::vector<ANNS::LabelType> tmp_query_label_set = query_storage_o->get_label_set(target_id);
+            std::vector<ANNS::LabelType> tmp_entry_label_set = _base_storage->get_label_set(entry_point);
+            float c = compute_label_coverage(tmp_query_label_set, tmp_entry_label_set);
+            float cost = compute_cost(dis, c, alpha);
+            search_queue.insert(entry_point, cost);
+        }
+
+        IdxType num_cmps = entry_points.size();
+
+        // 3. 贪心扩展最近节点
+        while (search_queue.has_unexpanded_node())
+        {
+            const Candidate &cur = search_queue.get_closest_unexpanded();
+
+            // iterate neighbors
+            {
+                std::lock_guard<std::mutex> lock(_graph->neighbor_locks[cur.id]);
+                neighbors = _graph->neighbors[cur.id];
+            }
+            for (auto i = 0; i < neighbors.size(); ++i)
+            {
+
+                // prefetch
+                if (i + 1 < neighbors.size() && visited_set.check(neighbors[i + 1]) == false)
+                    _base_storage->prefetch_vec_by_id(neighbors[i + 1]);
+
+                // skip if visited
+                auto &neighbor = neighbors[i];
+                if (visited_set.check(neighbor))
+                    continue;
+                visited_set.set(neighbor);
+
+                // push to search queue
+                // search_queue.insert(neighbor, _distance_handler->compute(query, _base_storage->get_vector(neighbor), dim));
+                // search_queue.insert(neighbor, get_cost_from_all_cost_entries(target_id, neighbor, all_cost_entries));
+                float dis = _distance_handler->compute(query, _base_storage->get_vector(neighbor), dim);
+                std::vector<ANNS::LabelType> tmp_query_label_set = query_storage_o->get_label_set(target_id);
+                std::vector<ANNS::LabelType> tmp_entry_label_set = _base_storage->get_label_set(neighbor);
+                float c = compute_label_coverage(tmp_query_label_set, tmp_entry_label_set);
+                float cost = compute_cost(dis, c, alpha);
+                search_queue.insert(neighbor, cost);
                 num_cmps++;
             }
         }
