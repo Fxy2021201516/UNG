@@ -22,7 +22,7 @@ namespace ANNS
         // for computing groundtruth: process all query with the same label set together
         void run(std::shared_ptr<IStorage> base_storage, std::shared_ptr<IStorage> query_storage,
                  std::shared_ptr<DistanceHandler> distance_handler, std::string scenario,
-                 uint32_t num_threads, IdxType K, std::pair<IdxType, float> *results);
+                 uint32_t num_threads, IdxType K, std::pair<IdxType, float> *results, std::string nearest_nei_dist_path);
 
     private:
         // data
@@ -42,8 +42,8 @@ namespace ANNS
                                      std::vector<IdxType> &base_super_set_group_ids);
         float answer_one_query(IdxType query_vec_id, const std::vector<IdxType> &base_super_set_group_ids);
         void create_file(std::string dirPath);
-        float answer_one_query_and_all_dis_to_csv(IdxType query_vec_id, const std::vector<IdxType> &target_group_ids, bool is_cal_all_dis = false);
+        float answer_one_query_and_all_dis_to_csv(IdxType query_vec_id, const std::vector<IdxType> &target_group_ids, std::string nearest_nei_dist_path, bool is_cal_all_dis = false);
     };
 }
 
-#endif // FILTERED_BRUTEFORCE_H
+#endif // FILTERED_BRUTEFORCE_Hstring nearest_nei_dist_path

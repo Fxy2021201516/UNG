@@ -7,19 +7,20 @@
 
 namespace po = boost::program_options;
 
-
-
-int main(int argc, char** argv) {
+int main(int argc, char **argv)
+{
     std::string data_type, dist_fn, base_bin_file, query_bin_file, base_label_file, query_label_file, gt_file, scenario;
     ANNS::IdxType K;
     uint32_t num_threads;
+    std::string nearest_nei_dist_path;
 
-    try {
+    try
+    {
         po::options_description desc{"Arguments"};
         desc.add_options()("help,h", "Print information on arguments");
-        desc.add_options()("data_type", po::value<std::string>(&data_type)->required(), 
+        desc.add_options()("data_type", po::value<std::string>(&data_type)->required(),
                            "data type <int8/uint8/float>");
-        desc.add_options()("dist_fn", po::value<std::string>(&dist_fn)->required(), 
+        desc.add_options()("dist_fn", po::value<std::string>(&dist_fn)->required(),
                            "distance function <L2/IP/cosine>");
         desc.add_options()("base_bin_file", po::value<std::string>(&base_bin_file)->required(),
                            "File containing the base vectors in binary format");
@@ -31,6 +32,8 @@ int main(int argc, char** argv) {
                            "Query label file in txt format");
         desc.add_options()("gt_file", po::value<std::string>(&gt_file)->required(),
                            "Filename for the writing ground truth in binary format");
+        desc.add_options()("nearest_nei_dist_path", po::value<std::string>(&nearest_nei_dist_path)->required(),
+                           "Filename for nearest_nei_dist_path");
         desc.add_options()("scenario", po::value<std::string>(&scenario)->default_value("containment"),
                            "Type of filter scenario <containment/equality/overlap/nofilter>");
         desc.add_options()("K", po::value<ANNS::IdxType>(&K)->required(),
@@ -40,12 +43,15 @@ int main(int argc, char** argv) {
 
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
-        if (vm.count("help")) {
+        if (vm.count("help"))
+        {
             std::cout << desc;
             return 0;
         }
         po::notify(vm);
-    } catch (const std::exception &ex) {
+    }
+    catch (const std::exception &ex)
+    {
         std::cerr << ex.what() << std::endl;
         return -1;
     }
@@ -63,8 +69,10 @@ int main(int argc, char** argv) {
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // run
+    std::cout << "Start running FilteredScan" << std::endl;
+    std::cout << "nearest_nei_dist_path: " << nearest_nei_dist_path << std::endl;
     ANNS::FilteredScan algo;
-    algo.run(base_storage, query_storage, distance_handler, scenario, num_threads, K, groundtruth);
+    algo.run(base_storage, query_storage, distance_handler, scenario, num_threads, K, groundtruth, nearest_nei_dist_path);
     auto time_cost = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start_time).count();
     std::cout << "Time cost: " << time_cost << "ms" << std::endl;
 
