@@ -60,7 +60,7 @@ namespace ANNS
     // for computing groundtruth: process all query with the same label set together
     void FilteredScan::run(std::shared_ptr<IStorage> base_storage, std::shared_ptr<IStorage> query_storage,
                            std::shared_ptr<DistanceHandler> distance_handler, std::string scenario,
-                           uint32_t num_threads, IdxType K, std::pair<IdxType, float> *results)
+                           uint32_t num_threads, IdxType K, std::pair<IdxType, float> *results, std::string nearest_nei_dist_path)
     {
         _base_storage = base_storage;
         _query_storage = query_storage;
@@ -98,7 +98,7 @@ namespace ANNS
             for (auto query_vec_id : query_group_id_to_vec_ids[query_group_id]) // 得到每个查询组里的向量ID
             {
                 answer_one_query(query_vec_id, target_group_ids);
-                answer_one_query_and_all_dis_to_csv(query_vec_id, target_group_ids, true);
+                answer_one_query_and_all_dis_to_csv(query_vec_id, target_group_ids, nearest_nei_dist_path, true);
             }
         }
     }
@@ -204,7 +204,7 @@ namespace ANNS
     }
 
     // fxy_add
-    float FilteredScan::answer_one_query_and_all_dis_to_csv(IdxType query_vec_id, const std::vector<IdxType> &target_group_ids, bool is_cal_all_dis)
+    float FilteredScan::answer_one_query_and_all_dis_to_csv(IdxType query_vec_id, const std::vector<IdxType> &target_group_ids, std::string nearest_nei_dist_path, bool is_cal_all_dis)
     {
         auto dim = _base_storage->get_dim();
         float num_cmps = 0;
@@ -229,7 +229,7 @@ namespace ANNS
             num_cmps += base_group_id_to_vec_ids[base_group_id].size();
         }
 
-        fs::path dirPath("./data/nearest_nei_dist/");
+        fs::path dirPath(nearest_nei_dist_path);
         fs::path filePath = dirPath / (std::to_string(query_vec_id) + "_nearest_nei_dis.csv");
 
         // 检查目录是否存在，若不存在则创建
@@ -238,7 +238,7 @@ namespace ANNS
             try
             {
                 fs::create_directories(dirPath); // 创建所有必要的父目录
-                std::cout << "Directory created successfully: " << dirPath << std::endl;
+                // std::cout << "Directory created successfully: " << dirPath << std::endl;
             }
             catch (const fs::filesystem_error &e)
             {

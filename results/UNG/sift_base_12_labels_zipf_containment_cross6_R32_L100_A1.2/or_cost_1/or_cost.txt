@@ -1,0 +1,7 @@
+将gt改成按照cost排序
+
+search的时候，也将dist替换为了cost
+
+dist归一化使用的自定义的min-max值[1,1e6]
+
+和or_cost运行过程一样，但是结果有一定差距。

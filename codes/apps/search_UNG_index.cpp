@@ -60,9 +60,9 @@ void read_cost_file(const std::string &file_path, std::vector<CostEntry> &cost_e
 }
 
 // 将排序后的 gt 结果存入文件
-void save_sorted_cost(const std::vector<CostEntry> &sorted_entries, int query_id)
+void save_sorted_cost(const std::vector<CostEntry> &sorted_entries, int query_id, std::string sort_cost_file)
 {
-    std::string output_dir = "../UNG_data/sort_cost_1/";
+    std::string output_dir = sort_cost_file;
     fssy::create_directories(output_dir); // 确保目录存在
 
     std::string output_file = output_dir + "sorted_cost_result_" + std::to_string(query_id) + ".csv";
@@ -85,9 +85,9 @@ void save_sorted_cost(const std::vector<CostEntry> &sorted_entries, int query_id
 }
 
 // 处理单个查询
-void process_query(int query_id, int K, std::pair<ANNS::IdxType, float> *gt, std::mutex &mtx)
+void process_query(int query_id, int K, std::pair<ANNS::IdxType, float> *gt, std::mutex &mtx, std::string cost_file, std::string sort_cost_file)
 {
-    std::string cost_dir = "../UNG_data/cost/";
+    std::string cost_dir = cost_file;
     std::string file_path = cost_dir + "cost_result_" + std::to_string(query_id) + ".csv";
     std::vector<CostEntry> cost_entries;
 
@@ -129,18 +129,18 @@ void process_query(int query_id, int K, std::pair<ANNS::IdxType, float> *gt, std
     }
 
     // 将排序后的结果存入 sort_cost 目录
-    save_sorted_cost(top_k_entries, query_id);
+    save_sorted_cost(top_k_entries, query_id, sort_cost_file);
 }
 
 // 加载所有 cost 文件并找到最小的 K 个(并行)
-void load_cost_files(std::pair<ANNS::IdxType, float> *gt, int num_queries, int K)
+void load_cost_files(std::pair<ANNS::IdxType, float> *gt, int num_queries, int K, std::string cost_file, std::string sort_cost_file)
 {
     std::vector<std::thread> threads;
     std::mutex mtx;
 
     for (int query_id = 0; query_id < num_queries; ++query_id)
     {
-        threads.emplace_back(process_query, query_id, K, gt, std::ref(mtx));
+        threads.emplace_back(process_query, query_id, K, gt, std::ref(mtx), cost_file, sort_cost_file);
     }
 
     for (auto &t : threads)
@@ -150,9 +150,9 @@ void load_cost_files(std::pair<ANNS::IdxType, float> *gt, int num_queries, int K
 }
 
 // 从已排序的 cost 文件中读取并将结果存入 gt
-void load_sorted_cost_to_gt(std::pair<ANNS::IdxType, float> *gt, int num_queries, int K)
+void load_sorted_cost_to_gt(std::pair<ANNS::IdxType, float> *gt, int num_queries, int K, std::string sort_cost_file)
 {
-    std::string sorted_cost_dir = "../UNG_data/sort_cost/";
+    std::string sorted_cost_dir = sort_cost_file;
 
     for (int query_id = 0; query_id < num_queries; ++query_id)
     {
@@ -203,15 +203,18 @@ int main(int argc, char **argv)
     std::string data_type, dist_fn, scenario;
     std::string base_bin_file, query_bin_file, base_label_file, query_label_file, gt_file, index_path_prefix, result_path_prefix;
     std::string query_label_file_r, query_label_file_o;
+    std::string cost_file, sort_cost_file;
     ANNS::IdxType K, num_entry_points;
     std::vector<ANNS::IdxType> Lsearch_list;
     uint32_t num_threads;
-    int gt_mode = 2; // 0: ground truth is distance and in binary file, 1: ground truth is cost and in csv file, calculate costs, 2: ground truth is cost and in csv file, read costs
+    int gt_mode; // 0: ground truth is distance and in binary file, 1: ground truth is cost and in csv file, calculate costs, 2: ground truth is cost and in csv file, read costs
 
     try
     {
         po::options_description desc{"Arguments"};
         desc.add_options()("help,h", "Print information on arguments");
+        desc.add_options()("gt_mode", po::value<int>(&gt_mode)->required(),
+                           "gt_mode <0/1/2>");
         desc.add_options()("data_type", po::value<std::string>(&data_type)->required(),
                            "data type <int8/uint8/float>");
         desc.add_options()("dist_fn", po::value<std::string>(&dist_fn)->required(),
@@ -230,6 +233,10 @@ int main(int argc, char **argv)
                            "Query label file in txt format");
         desc.add_options()("gt_file", po::value<std::string>(&gt_file)->required(),
                            "Filename for the computed ground truth in binary format");
+        desc.add_options()("cost_file", po::value<std::string>(&cost_file)->required(),
+                           "Filename for the cost_file");
+        desc.add_options()("sort_cost_file", po::value<std::string>(&sort_cost_file)->required(),
+                           "Filename for the sort_cost_file");
         desc.add_options()("K", po::value<ANNS::IdxType>(&K)->required(),
                            "Number of ground truth nearest neighbors to compute");
         desc.add_options()("num_threads", po::value<uint32_t>(&num_threads)->default_value(ANNS::default_paras::NUM_THREADS),
@@ -289,11 +296,11 @@ int main(int argc, char **argv)
         ANNS::load_gt_file(gt_file, gt, num_queries, K);
     else if (gt_mode == 1)
     {
-        load_cost_files(gt, num_queries, K);
+        load_cost_files(gt, num_queries, K, cost_file, sort_cost_file);
     }
     else if (gt_mode == 2)
     {
-        load_sorted_cost_to_gt(gt, num_queries, K);
+        load_sorted_cost_to_gt(gt, num_queries, K, sort_cost_file);
     }
     auto results = new std::pair<ANNS::IdxType, float>[num_queries * K];
 
