@@ -35,8 +35,8 @@ def process_query(query, vectors, output_dir, query_index):
 
 def main(sift_data_dir):
     # 文件路径，基于 sift_data_dir 构建
-    query_file_path = os.path.join(sift_data_dir, "sift/sift_query_12_labels_zipf_containment_o.txt")
-    vector_file_path = os.path.join(sift_data_dir, "sift/sift_base_12_labels_zipf.txt")
+    query_file_path = os.path.join(sift_data_dir, "sift/sift_query_labels_containment_o.txt")
+    vector_file_path = os.path.join(sift_data_dir, "sift/sift_base_labels.txt")
     output_dir = os.path.join(sift_data_dir, "coverage")
     
     # 如果输出目录不存在，则创建它

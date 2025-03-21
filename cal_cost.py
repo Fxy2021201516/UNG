@@ -58,14 +58,14 @@ def process_query(query_id, coverage_folder, nearest_nei_folder, output_folder):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Calculate costs based on coverage and nearest neighbor distances.")
-    parser.add_argument("sift_data_dir", type=str, help="Directory containing the dataset folders")
+    parser.add_argument("words_data_dir", type=str, help="Directory containing the dataset folders")
     args = parser.parse_args()
     
-    SIFT_DATA_DIR = args.sift_data_dir
+    SIFT_DATA_DIR = args.words_data_dir
     
     coverage_folder = os.path.join(SIFT_DATA_DIR, 'coverage')
     nearest_nei_folder = os.path.join(SIFT_DATA_DIR, 'nearest_nei_dist')
-    output_folder = os.path.join(SIFT_DATA_DIR, 'cost_1')
+    output_folder = os.path.join(SIFT_DATA_DIR, 'cost')
 
     alpha = 0.5  # 设置alpha值
     
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     os.makedirs(output_folder, exist_ok=True)
     
     with ProcessPoolExecutor() as executor:
-        futures = {executor.submit(process_query, query_id, coverage_folder, nearest_nei_folder, output_folder): query_id for query_id in range(10000)}
+        futures = {executor.submit(process_query, query_id, coverage_folder, nearest_nei_folder, output_folder): query_id for query_id in range(1000)}
         for future in as_completed(futures):
             query_id = futures[future]
             try:
